@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { getProducts, addProduct, deleteProduct, updateProduct, getSettings, updateSettings, getSlides, updateSlides } from '@/lib/actions'
-import { Plus, Trash2, Edit2, ShieldCheck, X, Save, Settings, Layout } from 'lucide-react'
+import { Plus, Trash2, Edit2, ShieldCheck, X, Save, Settings, Layout, Camera, Video, Upload } from 'lucide-react'
 import Image from 'next/image'
 
 export default function AdminPage() {
@@ -16,14 +16,15 @@ export default function AdminPage() {
   const [settings, setSettings] = useState({ logo: '', whatsapp: '' })
   const [slides, setSlides] = useState([])
   const [formData, setFormData] = useState({
-    game: 'Genshin Impact',
-    category: 'Game Accounts',
+    type: 'account',
+    category: 'Genshin Impact',
     status: 'available',
     isHotDeal: false,
+    isPremium: false,
     title: '',
     price: '',
     description: '',
-    images: [''],
+    images: [],
     video: ''
   })
 
@@ -50,11 +51,44 @@ export default function AdminPage() {
     setSlides(data)
   }
 
+  // Format price helper
+  const formatPrice = (priceStr) => {
+    if (!priceStr) return "₹0"
+    const numericPrice = priceStr.replace(/[^0-9]/g, '')
+    if (!numericPrice) return priceStr
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(numericPrice)
+  }
+
+  const handleSlideImageUpload = async (e, idx) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const imageBase64 = await fileToBase64(file)
+    const newSlides = [...slides]
+    newSlides[idx].image = imageBase64
+    setSlides(newSlides)
+  }
+
   const handleUpdateSlides = async (e) => {
     e.preventDefault()
     await updateSlides(slides)
     setIsSliderModalOpen(false)
     alert('Slider updated successfully!')
+  }
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const logoBase64 = await fileToBase64(file)
+    setSettings(prev => ({
+      ...prev,
+      logo: logoBase64
+    }))
   }
 
   const handleUpdateSettings = async (e) => {
@@ -84,17 +118,102 @@ export default function AdminPage() {
     setIsModalOpen(false)
     setEditingProduct(null)
     setFormData({ 
-      game: 'Genshin Impact', 
-      category: 'Game Accounts', 
+      type: 'account', 
+      category: 'Genshin Impact', 
       status: 'available', 
       isHotDeal: false, 
+      isPremium: false,
       title: '', 
       price: '', 
       description: '', 
-      images: [''], 
+      images: [], 
       video: '' 
     })
     loadProducts()
+  }
+
+  const fileToBase64 = (file, quality = 0.7) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = (event) => {
+        const imageUrl = event.target.result
+        
+        // If it's not an image or if it's small enough, don't compress
+        if (!file.type.startsWith('image/') || file.size < 200000) {
+          resolve(imageUrl)
+          return
+        }
+
+        const img = new window.Image()
+        img.src = imageUrl
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let width = img.width
+          let height = img.height
+
+          // Max dimension
+          const MAX_SIZE = 1200
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width
+              width = MAX_SIZE
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height
+              height = MAX_SIZE
+            }
+          }
+
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, width, height)
+          
+          // Compress to JPEG
+          resolve(canvas.toDataURL('image/jpeg', quality))
+        }
+        img.onerror = (error) => reject(error)
+      }
+      reader.onerror = (error) => reject(error)
+    })
+  }
+
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files)
+    if (files.length === 0) return
+
+    const newImages = await Promise.all(files.map(file => fileToBase64(file)))
+    setFormData(prev => ({
+      ...prev,
+      images: [...prev.images, ...newImages]
+    }))
+  }
+
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const videoBase64 = await fileToBase64(file)
+    setFormData(prev => ({
+      ...prev,
+      video: videoBase64
+    }))
+  }
+
+  const removeImage = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }))
+  }
+
+  const removeVideo = () => {
+    setFormData(prev => ({
+      ...prev,
+      video: ''
+    }))
   }
 
   const handleDelete = async (id) => {
@@ -108,10 +227,12 @@ export default function AdminPage() {
     setEditingProduct(product)
     setFormData({
       ...product,
-      category: product.category || 'Game Accounts',
+      type: product.type || 'account',
+      category: product.category || 'Genshin Impact',
       status: product.status || 'available',
       isHotDeal: product.isHotDeal || false,
-      images: product.images || [''],
+      isPremium: product.isPremium || false,
+      images: product.images || [],
       video: product.video || ''
     })
     setIsModalOpen(true)
@@ -166,14 +287,15 @@ export default function AdminPage() {
             onClick={() => {
               setEditingProduct(null)
             setFormData({ 
-              game: 'Genshin Impact', 
-              category: 'Game Accounts', 
+              type: 'account', 
+              category: 'Genshin Impact', 
               status: 'available', 
               isHotDeal: false, 
+              isPremium: false,
               title: '', 
               price: '', 
               description: '', 
-              images: [''], 
+              images: [], 
               video: '' 
             })
             setIsModalOpen(true)
@@ -196,16 +318,16 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
-            <div className="flex justify-between items-start mb-2">
-              <h3 className="text-xl font-bold text-white">{product.title}</h3>
-              <span className="text-primary font-bold">{product.price}</span>
+            <div className="flex flex-col mb-4">
+              <h3 className="text-xl font-bold text-white line-clamp-2 min-h-[3.5rem] mb-1">{product.title}</h3>
+              <span className="text-primary font-black text-2xl tracking-tight">{formatPrice(product.price)}</span>
             </div>
             <div className="flex items-center gap-2 mb-6">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                {product.game}
+                {product.type}
               </span>
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                {product.category || 'Game Accounts'}
+                {product.category}
               </span>
             </div>
             
@@ -255,25 +377,28 @@ export default function AdminPage() {
             <form onSubmit={handleAddOrUpdate} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Category</label>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Type</label>
+                  <select 
+                    value={formData.type}
+                    onChange={(e) => setFormData({...formData, type: e.target.value})}
+                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
+                  >
+                    <option value="account">Account</option>
+                    <option value="cheat">Cheat</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Category (Game)</label>
                   <select 
                     value={formData.category}
                     onChange={(e) => setFormData({...formData, category: e.target.value})}
                     className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
                   >
-                    <option value="Game Accounts">Game Accounts</option>
-                    <option value="Game Cheats">Game Cheats</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Game</label>
-                  <select 
-                    value={formData.game}
-                    onChange={(e) => setFormData({...formData, game: e.target.value})}
-                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
-                  >
                     <option value="Genshin Impact">Genshin Impact</option>
                     <option value="Wuthering Waves">Wuthering Waves</option>
+                    <option value="Honkai Star Rail">Honkai Star Rail</option>
+                    <option value="Free Fire PC">Free Fire PC</option>
+                    <option value="Free Fire Mobile">Free Fire Mobile</option>
                   </select>
                 </div>
               </div>
@@ -303,17 +428,31 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 bg-white/5 p-4 rounded-xl border border-white/10">
-                <input 
-                  type="checkbox"
-                  id="hotDeal"
-                  checked={formData.isHotDeal}
-                  onChange={(e) => setFormData({...formData, isHotDeal: e.target.checked})}
-                  className="w-5 h-5 rounded border-white/10 bg-black/50 text-primary focus:ring-primary"
-                />
-                <label htmlFor="hotDeal" className="text-sm font-bold text-white cursor-pointer select-none flex items-center gap-2">
-                  Mark as Hot Deal
-                </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-center gap-3 bg-white/5 p-4 rounded-xl border border-white/10">
+                  <input 
+                    type="checkbox"
+                    id="hotDeal"
+                    checked={formData.isHotDeal}
+                    onChange={(e) => setFormData({...formData, isHotDeal: e.target.checked})}
+                    className="w-5 h-5 rounded border-white/10 bg-black/50 text-primary focus:ring-primary"
+                  />
+                  <label htmlFor="hotDeal" className="text-sm font-bold text-white cursor-pointer select-none flex items-center gap-2">
+                    Mark as Hot Deal
+                  </label>
+                </div>
+                <div className="flex items-center gap-3 bg-yellow-500/5 p-4 rounded-xl border border-yellow-500/10">
+                  <input 
+                    type="checkbox"
+                    id="premium"
+                    checked={formData.isPremium}
+                    onChange={(e) => setFormData({...formData, isPremium: e.target.checked})}
+                    className="w-5 h-5 rounded border-yellow-500/10 bg-black/50 text-yellow-500 focus:ring-yellow-500"
+                  />
+                  <label htmlFor="premium" className="text-sm font-bold text-yellow-500 cursor-pointer select-none flex items-center gap-2">
+                    Mark as Premium
+                  </label>
+                </div>
               </div>
 
               <div>
@@ -341,55 +480,72 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Image URLs</label>
-                <div className="space-y-3">
-                  {formData.images.map((url, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <input 
-                        type="url"
-                        required
-                        value={url}
-                        onChange={(e) => {
-                          const newImages = [...formData.images]
-                          newImages[idx] = e.target.value
-                          setFormData({...formData, images: newImages})
-                        }}
-                        className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
-                        placeholder="https://example.com/image.jpg"
-                      />
-                      {formData.images.length > 1 && (
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            const newImages = formData.images.filter((_, i) => i !== idx)
-                            setFormData({...formData, images: newImages})
-                          }}
-                          className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-3 rounded-xl transition-all"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-6 ml-1">Product Media</label>
+                
+                <div className="space-y-8">
+                  {/* Images Upload */}
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-white">Images</span>
+                      <label className="cursor-pointer bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-primary/20">
+                        <Camera className="w-4 h-4" /> Upload Images
+                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} />
+                      </label>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                      {formData.images.map((img, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border border-white/10 group bg-black/50">
+                          <Image src={img} alt={`Preview ${idx}`} fill className="object-cover" />
+                          <button 
+                            type="button"
+                            onClick={() => removeImage(idx)}
+                            className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {formData.images.length === 0 && (
+                        <div className="col-span-full py-8 border-2 border-dashed border-white/5 rounded-3xl flex flex-col items-center justify-center text-gray-600 italic text-sm">
+                          <Upload className="w-8 h-8 mb-2 opacity-20" />
+                          No images uploaded
+                        </div>
                       )}
                     </div>
-                  ))}
-                  <button 
-                    type="button"
-                    onClick={() => setFormData({...formData, images: [...formData.images, '']})}
-                    className="text-primary font-bold text-sm flex items-center gap-1 hover:text-secondary transition-colors ml-1"
-                  >
-                    <Plus className="w-4 h-4" /> Add Another Image
-                  </button>
-                </div>
-              </div>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Video URL (Optional - YouTube or direct link)</label>
-                <input 
-                  type="url"
-                  value={formData.video || ''}
-                  onChange={(e) => setFormData({...formData, video: e.target.value})}
-                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
-                  placeholder="https://www.youtube.com/watch?v=..."
-                />
+                  {/* Video Upload */}
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-bold text-white">Video (Optional)</span>
+                      {!formData.video && (
+                        <label className="cursor-pointer bg-secondary/10 hover:bg-secondary/20 text-secondary px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-secondary/20">
+                          <Video className="w-4 h-4" /> Upload Video
+                          <input type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
+                        </label>
+                      )}
+                    </div>
+
+                    {formData.video ? (
+                      <div className="relative aspect-video rounded-2xl overflow-hidden border border-white/10 bg-black/50 group">
+                        <video src={formData.video} className="w-full h-full object-cover" controls />
+                        <button 
+                          type="button"
+                          onClick={removeVideo}
+                          className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-10"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-8 border-2 border-dashed border-white/5 rounded-3xl flex flex-col items-center justify-center text-gray-600 italic text-sm">
+                        <Video className="w-8 h-8 mb-2 opacity-20" />
+                        No video uploaded
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <button type="submit" className="w-full bg-primary hover:bg-primary/80 text-white font-black py-5 rounded-2xl text-xl transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2">
@@ -457,18 +613,20 @@ export default function AdminPage() {
 
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Image URL</label>
-                          <input 
-                            type="url"
-                            value={slide.image}
-                            onChange={(e) => {
-                              const newSlides = [...slides]
-                              newSlides[idx].image = e.target.value
-                              setSlides(newSlides)
-                            }}
-                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
-                            placeholder="https://i.imgur.com/..."
-                          />
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Slide Image</label>
+                          <div className="flex items-center gap-4">
+                            <div className="relative w-24 h-16 rounded-xl overflow-hidden border border-white/10 bg-black/50 shrink-0">
+                              {slide.image ? (
+                                <Image src={slide.image} alt="Slide Preview" fill className="object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-600 italic text-[10px]">No Image</div>
+                              )}
+                            </div>
+                            <label className="cursor-pointer bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all border border-white/10 flex items-center gap-2">
+                              <Camera className="w-4 h-4" /> Change Image
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSlideImageUpload(e, idx)} />
+                            </label>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -538,7 +696,7 @@ export default function AdminPage() {
 
             <form onSubmit={handleUpdateSettings} className="space-y-6">
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Site Logo URL</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Site Logo</label>
                 <div className="space-y-4">
                   <div className="flex items-center gap-4 p-4 bg-black/50 border border-white/10 rounded-2xl">
                     <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center relative overflow-hidden shrink-0 border border-white/10">
@@ -550,19 +708,12 @@ export default function AdminPage() {
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-bold text-white mb-1">Logo Preview</p>
-                      <p className="text-xs text-gray-500">How it looks in the navbar</p>
+                      <label className="cursor-pointer inline-block bg-white/5 hover:bg-white/10 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all border border-white/10">
+                        Upload Logo
+                        <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                      </label>
                     </div>
                   </div>
-                  <input 
-                    type="url"
-                    value={settings.logo}
-                    onChange={(e) => setSettings({...settings, logo: e.target.value})}
-                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none transition-all"
-                    placeholder="https://example.com/logo.png"
-                  />
-                  <p className="text-[10px] text-gray-500 px-1">
-                    Enter a direct link to your logo image. Transparent PNG or SVG recommended.
-                  </p>
                 </div>
               </div>
 

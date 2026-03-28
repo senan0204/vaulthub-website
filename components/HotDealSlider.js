@@ -3,9 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ChevronLeft, ChevronRight, Flame, ArrowRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Flame, ArrowRight, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getSlides } from '@/lib/actions'
 
 export default function HotDealSlider() {
   const [slides, setSlides] = useState([])
@@ -14,11 +13,58 @@ export default function HotDealSlider() {
   const [isPaused, setIsPaused] = useState(false)
 
   useEffect(() => {
-    async function loadSlides() {
-      const data = await getSlides()
-      setSlides(data)
+    async function loadData() {
+      const [slidesRes, productsRes] = await Promise.all([
+        fetch('/api/slides', { cache: 'no-store' }),
+        fetch('/api/products', { cache: 'no-store' })
+      ])
+      const [slidesData, productsData] = await Promise.all([
+        slidesRes.json(),
+        productsRes.json()
+      ])
+      
+      const productById = new Map(productsData.map((p) => [p.id, p]))
+
+      // Filter products marked as Hot Deal
+      const hotDealProducts = productsData
+        .filter(p => p.isHotDeal && p.status !== 'sold' && p.images && p.images[0])
+        .map(p => ({
+          id: p.id,
+          image: p.images[0],
+          title: p.title,
+          subtitle: p.description,
+          buttonText: 'BUY NOW',
+          linkedProductId: p.id,
+          isPremium: !!p.isPremium
+        }))
+
+      // Custom Cheat Slide
+      const customCheatSlide = {
+        id: 'custom-cheat-slide',
+        image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=2070&auto=format&fit=crop', // Gaming setup bg
+        title: 'Custom Cheat (Free Fire)',
+        subtitle: 'Get your own private, high-performance custom cheat. Undetected and optimized.',
+        buttonText: 'GET NOW',
+        href: '/custom-cheat',
+        isCustomCheat: true
+      }
+
+      const curatedSlides = (slidesData || [])
+        .map((s) => {
+          const linked = s.linkedProductId ? productById.get(s.linkedProductId) : null
+          const image = s.image || linked?.images?.[0]
+          if (!image) return null
+          return {
+            ...s,
+            image,
+            isPremium: !!linked?.isPremium
+          }
+        })
+        .filter(Boolean)
+
+      setSlides([...hotDealProducts, customCheatSlide, ...curatedSlides])
     }
-    loadSlides()
+    loadData()
   }, [])
 
   const nextSlide = useCallback(() => {
@@ -35,7 +81,7 @@ export default function HotDealSlider() {
 
   useEffect(() => {
     if (slides.length <= 1 || isPaused) return
-    const timer = setInterval(nextSlide, 5000)
+    const timer = setInterval(nextSlide, 6000)
     return () => clearInterval(timer)
   }, [nextSlide, slides.length, isPaused])
 
@@ -65,11 +111,18 @@ export default function HotDealSlider() {
 
   return (
     <section 
-      className="container mx-auto px-4 py-8"
+      className="container mx-auto px-4 py-4 md:py-8"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
-      <div className="relative w-full h-[350px] md:h-[450px] rounded-[2rem] overflow-hidden bg-accent/20 border border-white/10 shadow-2xl group">
+      <div className={`relative w-full h-[300px] md:h-[450px] rounded-[1.5rem] md:rounded-[2rem] overflow-hidden border shadow-2xl group transition-all duration-500 ${
+        currentSlide.isPremium || currentSlide.isCustomCheat 
+        ? 'border-yellow-500/50 shadow-[0_0_30px_rgba(234,179,8,0.15)] bg-gradient-to-br from-yellow-500/10 to-accent/50' 
+        : 'bg-accent/20 border-white/10'
+      }`}>
+        {(currentSlide.isPremium || currentSlide.isCustomCheat) && (
+          <div className="absolute inset-0 bg-gradient-to-tr from-yellow-500/5 to-transparent pointer-events-none" />
+        )}
         <AnimatePresence initial={false} custom={direction}>
           <motion.div
             key={currentIndex}
@@ -86,16 +139,19 @@ export default function HotDealSlider() {
             className="absolute inset-0"
           >
             <div className="relative w-full h-full cursor-pointer">
-              <Link href={currentSlide.linkedProductId ? `/product/${currentSlide.linkedProductId}` : '#'}>
+              <Link href={currentSlide.isCustomCheat ? '/custom-cheat' : (currentSlide.linkedProductId ? `/product/${currentSlide.linkedProductId}` : '#')}>
                 <Image
                   src={currentSlide.image}
                   alt={currentSlide.title}
                   fill
                   className="object-cover transition-transform duration-1000 group-hover:scale-105"
                   priority
+                  sizes="(max-width: 768px) 100vw, 1200px"
                 />
                 {/* Dark Gradient Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/40 to-transparent md:from-black/80 md:via-black/20" />
+                <div className={`absolute inset-0 bg-gradient-to-r from-black/90 via-black/40 to-transparent md:from-black/80 md:via-black/20 ${
+                  (currentSlide.isPremium || currentSlide.isCustomCheat) ? 'mix-blend-multiply opacity-80' : ''
+                }`} />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
                 
                 <div className="absolute inset-0 flex items-center justify-start p-8 md:p-16">
@@ -103,16 +159,34 @@ export default function HotDealSlider() {
                     <motion.div 
                       initial={{ x: -20, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
-                      className="inline-flex items-center gap-2 bg-red-600 px-4 py-1.5 rounded-full text-[10px] font-black text-white uppercase tracking-widest mb-6 shadow-lg shadow-red-600/20"
+                      className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black text-white uppercase tracking-widest mb-6 shadow-lg ${
+                        currentSlide.isCustomCheat 
+                        ? 'bg-yellow-500 text-black shadow-yellow-500/20' 
+                        : 'bg-red-600 shadow-red-600/20'
+                      }`}
                     >
-                      <Flame className="w-3.5 h-3.5 fill-current" /> HOT DEAL
+                      {currentSlide.isCustomCheat ? <Zap className="w-3.5 h-3.5 fill-current" /> : <Flame className="w-3.5 h-3.5 fill-current" />}
+                      {currentSlide.isCustomCheat ? 'EXCLUSIVE' : 'HOT DEAL'}
                     </motion.div>
+
+                    {currentSlide.isPremium && !currentSlide.isCustomCheat && (
+                      <motion.div
+                        initial={{ x: -20, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        transition={{ delay: 0.05 }}
+                        className="inline-flex items-center gap-2 bg-yellow-500 backdrop-blur-md px-4 py-1.5 rounded-full border border-yellow-400 text-[10px] font-black text-black uppercase tracking-widest mb-6 shadow-lg shadow-yellow-500/20"
+                      >
+                        PREMIUM
+                      </motion.div>
+                    )}
                     
                     <motion.h2 
                       initial={{ x: -20, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
                       transition={{ delay: 0.1 }}
-                      className="text-4xl md:text-6xl font-black text-white mb-4 tracking-tighter leading-none"
+                      className={`text-4xl md:text-6xl font-black mb-4 tracking-tighter leading-none ${
+                        (currentSlide.isPremium || currentSlide.isCustomCheat) ? 'text-yellow-500' : 'text-white'
+                      }`}
                     >
                       {currentSlide.title}
                     </motion.h2>
@@ -121,7 +195,7 @@ export default function HotDealSlider() {
                       initial={{ x: -20, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
                       transition={{ delay: 0.2 }}
-                      className="text-lg md:text-xl font-medium text-gray-300 mb-8 max-w-lg leading-relaxed"
+                      className="text-lg md:text-xl font-medium text-gray-300 mb-8 max-w-lg leading-relaxed line-clamp-2"
                     >
                       {currentSlide.subtitle}
                     </motion.p>
@@ -132,7 +206,11 @@ export default function HotDealSlider() {
                       transition={{ delay: 0.3 }}
                       className="flex items-center gap-4"
                     >
-                      <span className="bg-white text-black px-8 py-3.5 rounded-xl font-black text-sm flex items-center gap-2 group/btn transition-all hover:gap-4 shadow-xl shadow-white/10">
+                      <span className={`px-8 py-3.5 rounded-xl font-black text-sm flex items-center gap-2 group/btn transition-all hover:gap-4 shadow-xl ${
+                        (currentSlide.isPremium || currentSlide.isCustomCheat)
+                        ? 'bg-yellow-500 text-black shadow-yellow-500/20'
+                        : 'bg-white text-black shadow-white/10'
+                      }`}>
                         {currentSlide.buttonText || 'GET DEAL'} <ArrowRight className="w-4 h-4" />
                       </span>
                     </motion.div>

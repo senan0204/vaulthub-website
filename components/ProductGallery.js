@@ -19,7 +19,7 @@ export default function ProductGallery({ images = [], video = '' }) {
   }
 
   const getYouTubeEmbedUrl = (url) => {
-    if (!url) return null
+    if (!url || url.startsWith('data:')) return null
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/
     const match = url.match(regExp)
     return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null
@@ -55,6 +55,7 @@ export default function ProductGallery({ images = [], video = '' }) {
               fill 
               className="object-cover transition-transform duration-700"
               priority
+              sizes="(max-width: 768px) 100vw, 50vw"
             />
             
             {/* Navigation Buttons */}
@@ -91,7 +92,7 @@ export default function ProductGallery({ images = [], video = '' }) {
               currentIndex === idx && !showVideo ? 'border-primary scale-105' : 'border-white/5 opacity-50 hover:opacity-100'
             }`}
           >
-            <Image src={img} alt={`Thumbnail ${idx + 1}`} fill className="object-cover" />
+            <Image src={img} alt={`Thumbnail ${idx + 1}`} fill className="object-cover" sizes="96px" />
           </button>
         ))}
         
@@ -103,7 +104,7 @@ export default function ProductGallery({ images = [], video = '' }) {
             }`}
           >
             {images[0] ? (
-               <Image src={images[0]} alt="Video thumbnail" fill className="object-cover opacity-30" />
+               <Image src={images[0]} alt="Video thumbnail" fill className="object-cover opacity-30" sizes="96px" />
             ) : null}
             <Play className="w-8 h-8 text-white relative z-10" />
           </button>

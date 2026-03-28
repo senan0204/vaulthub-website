@@ -3,10 +3,9 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { MessageCircle, ExternalLink, Play } from 'lucide-react'
+import { MessageCircle, ExternalLink, Play, Zap } from 'lucide-react'
 import PaymentModal from './PaymentModal'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getSettings } from '@/lib/actions'
 
 export default function ProductCard({ product }) {
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -15,16 +14,39 @@ export default function ProductCard({ product }) {
   const [whatsapp, setWhatsapp] = useState('919752691095')
 
   const isSold = product.status === 'sold'
+  const isPremium = product.isPremium
   const hasMultipleImages = product.images && product.images.length > 1
+
+  // Format price: "8999 R.s/-" -> "₹8,999"
+  const formatPrice = (priceStr) => {
+    if (!priceStr) return "₹0"
+    // Extract numbers only
+    const numericPrice = priceStr.replace(/[^0-9]/g, '')
+    if (!numericPrice) return priceStr // Fallback if no numbers found (e.g. "Negotiable")
+    
+    // Format with commas and currency symbol
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(numericPrice)
+  }
   
   useEffect(() => {
+    const controller = new AbortController()
     async function loadSettings() {
-      const settings = await getSettings()
-      if (settings && settings.whatsapp) {
-        setWhatsapp(settings.whatsapp)
+      try {
+        const res = await fetch('/api/settings', { cache: 'no-store', signal: controller.signal })
+        const data = await res.json()
+        if (data && data.whatsapp) setWhatsapp(data.whatsapp)
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error('Failed to load settings:', error)
+        }
       }
     }
     loadSettings()
+    return () => controller.abort()
   }, [])
 
   useEffect(() => {
@@ -37,15 +59,23 @@ export default function ProductCard({ product }) {
     return () => clearInterval(interval)
   }, [hasMultipleImages, isHovered, isSold, product.images?.length])
 
-  const message = 'Hello, I want to buy:\nProduct: ' + product.title + '\nCategory: ' + (product.category || 'Game Accounts') + '\nGame: ' + product.game + '\nPrice: ' + product.price + '\nFrom VaultHub'
+  const message = `Hello, I want to buy:\nProduct: ${product.title}\nType: ${product.type || 'Account'}\nCategory: ${product.category || 'Game Accounts'}\nPrice: ${formatPrice(product.price)}\nFrom VaultHub`
   const whatsappUrl = `https://wa.me/${whatsapp}?text=${encodeURIComponent(message)}`
 
   return (
     <div 
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`bg-accent/50 border border-white/10 rounded-3xl overflow-hidden group hover:border-primary/50 transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 ${isSold ? 'opacity-75' : ''}`}
+      className={`relative bg-accent/50 border overflow-hidden group transition-all duration-500 rounded-3xl ${
+        isPremium 
+        ? 'border-yellow-500/50 shadow-[0_0_30px_rgba(234,179,8,0.15)] bg-gradient-to-br from-yellow-500/10 to-accent/50' 
+        : 'border-white/10 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10'
+      } ${isSold ? 'opacity-75' : ''}`}
     >
+      {isPremium && (
+        <div className="absolute inset-0 bg-gradient-to-tr from-yellow-500/5 to-transparent pointer-events-none" />
+      )}
+
       <div className="relative h-64 overflow-hidden bg-accent/20">
         <AnimatePresence>
           {product.images && product.images.length > 0 ? (
@@ -63,6 +93,7 @@ export default function ProductCard({ product }) {
                 fill 
                 className={`object-cover transition-transform duration-500 group-hover:scale-105 ${isSold ? 'grayscale-[0.5]' : ''}`}
                 priority={currentImageIndex === 0}
+                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
               />
             </motion.div>
           ) : (
@@ -88,12 +119,19 @@ export default function ProductCard({ product }) {
         
         {/* Badges Container */}
         <div className="absolute top-4 left-4 flex flex-col gap-2 z-10">
-          <div className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 text-xs font-bold text-white uppercase tracking-widest">
-            {product.game}
+          <div className={`backdrop-blur-md px-3 py-1 rounded-full border text-[10px] font-bold text-white uppercase tracking-widest ${
+            isPremium ? 'bg-yellow-500/80 border-yellow-500/50' : 'bg-black/60 border-white/10'
+          }`}>
+            {product.category || 'Game Accounts'}
           </div>
           {product.isHotDeal && !isSold && (
             <div className="bg-red-600/90 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 text-[10px] font-black text-white uppercase tracking-tighter w-fit animate-pulse">
               HOT DEAL
+            </div>
+          )}
+          {isPremium && (
+            <div className="bg-yellow-500 backdrop-blur-md px-3 py-1 rounded-full border border-yellow-400 text-[10px] font-black text-black uppercase tracking-tighter w-fit shadow-lg shadow-yellow-500/20">
+              PREMIUM
             </div>
           )}
           {isSold && (
@@ -103,26 +141,39 @@ export default function ProductCard({ product }) {
           )}
         </div>
 
-        {product.video && (
-          <div className="absolute top-4 right-4 bg-primary/80 backdrop-blur-md p-2 rounded-full border border-white/10 text-white z-10">
-            <Play className="w-3 h-3 fill-current" />
-          </div>
-        )}
+        <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
+          {product.video && (
+            <div className="bg-primary/80 backdrop-blur-md p-2 rounded-full border border-white/10 text-white">
+              <Play className="w-3 h-3 fill-current" />
+            </div>
+          )}
+          {product.type === 'cheat' && (
+            <div className="bg-secondary/80 backdrop-blur-md p-2 rounded-full border border-white/10 text-white">
+              <Zap className="w-3 h-3 fill-current" />
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="p-6">
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="text-xl font-bold text-white group-hover:text-secondary transition-colors line-clamp-1">
+      <div className="p-6 relative z-10">
+        <div className="flex justify-between items-start gap-4 mb-4">
+          <h3 className={`text-lg font-bold transition-colors line-clamp-3 min-h-[4.5rem] leading-snug ${
+            isPremium ? 'text-yellow-500 group-hover:text-yellow-400' : 'text-white group-hover:text-secondary'
+          }`}>
             {product.title}
           </h3>
-          <span className="text-2xl font-black text-primary">
-            {product.price}
+          <span className={`text-xl font-black tracking-tight whitespace-nowrap ${
+            isPremium ? 'text-yellow-500' : 'text-primary'
+          }`}>
+            {formatPrice(product.price)}
           </span>
         </div>
 
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded border border-white/5">
-            {product.category || 'Game Accounts'}
+          <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${
+            isPremium ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' : 'bg-white/5 text-gray-500 border-white/5'
+          }`}>
+            {product.type || 'Account'}
           </span>
         </div>
 
@@ -133,7 +184,11 @@ export default function ProductCard({ product }) {
         <div className="grid grid-cols-2 gap-3">
           <Link 
             href={`/product/${product.id}`}
-            className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white py-3 rounded-2xl font-bold transition-all"
+            className={`flex items-center justify-center gap-2 py-3 rounded-2xl font-bold transition-all border ${
+              isPremium 
+              ? 'bg-yellow-500/5 hover:bg-yellow-500/10 text-yellow-500 border-yellow-500/20' 
+              : 'bg-white/5 hover:bg-white/10 text-white border-white/10'
+            }`}
           >
             <ExternalLink className="w-4 h-4" /> Details
           </Link>
@@ -147,7 +202,11 @@ export default function ProductCard({ product }) {
           ) : (
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center justify-center gap-2 bg-primary hover:bg-primary/80 text-white py-3 rounded-2xl font-bold transition-all hover:scale-105"
+              className={`flex items-center justify-center gap-2 py-3 rounded-2xl font-bold transition-all hover:scale-105 shadow-lg ${
+                isPremium 
+                ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-yellow-500/20' 
+                : 'bg-primary hover:bg-primary/80 text-white shadow-primary/20'
+              }`}
             >
               <MessageCircle className="w-4 h-4" /> Buy Now
             </button>

@@ -1,43 +1,40 @@
 import Hero from "@/components/Hero";
-import TrustBadges from "@/components/TrustBadges";
-import WhyChooseUs from "@/components/WhyChooseUs";
-import ProductList from "@/components/ProductList";
 import HotDealSlider from "@/components/HotDealSlider";
-import { getProducts, getSettings } from "@/lib/actions";
+import { Zap, ShieldCheck } from "lucide-react";
 
 export default async function Home() {
-  const products = await getProducts();
-  const settings = await getSettings();
-  const whatsapp = settings?.whatsapp || "919752691095";
-
   return (
-    <div className="flex flex-col gap-16 pb-24">
+    <div className="flex flex-col pb-10 md:pb-14">
+      {/* 1. Hero Section */}
       <Hero />
       
-      <div className="container mx-auto px-4 -mt-32 relative z-20 space-y-24">
-        <TrustBadges />
-
+      {/* 2. Hot Deals Slider */}
+      <div className="container mx-auto px-4 mt-10 md:mt-12 relative z-20 mb-16 md:mb-20">
         <HotDealSlider />
+      </div>
 
-        <ProductList initialProducts={products} />
-
-        <WhyChooseUs />
-
-        <section className="py-24 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-[3rem] border border-white/5 px-8 md:px-16 text-center">
-          <h2 className="text-4xl md:text-6xl font-black text-white mb-8">
-            Need a Custom Account?
-          </h2>
-          <p className="text-gray-400 text-xl max-w-2xl mx-auto mb-12">
-            Looking for something specific? Contact us on WhatsApp and we'll find the perfect account for your needs.
-          </p>
-          <a 
-            href={`https://wa.me/${whatsapp}`} 
-            target="_blank"
-            className="inline-flex items-center justify-center bg-white text-black text-xl font-black px-12 py-6 rounded-2xl hover:scale-105 transition-all shadow-xl shadow-white/5"
-          >
-            Contact Support Now
-          </a>
-        </section>
+      {/* 3. Key Features Preview */}
+      <div className="container mx-auto px-4 mb-24">
+        <div className="flex flex-col md:flex-row items-stretch justify-center gap-6">
+          <div className="flex items-center gap-5 p-6 md:p-7 rounded-[2rem] bg-white/5 border border-white/10 hover:bg-white/[0.08] transition-all group flex-1 max-w-xl">
+            <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <ShieldCheck className="w-7 h-7 text-primary" />
+            </div>
+            <div className="text-left">
+              <h3 className="text-lg md:text-xl font-bold text-white mb-1">Verified Deals</h3>
+              <p className="text-gray-500 text-sm leading-relaxed">Every transaction is manually verified for your safety.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-5 p-6 md:p-7 rounded-[2rem] bg-white/5 border border-white/10 hover:bg-white/[0.08] transition-all group flex-1 max-w-xl">
+            <div className="w-14 h-14 rounded-2xl bg-secondary/10 border border-secondary/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+              <Zap className="w-7 h-7 text-secondary" />
+            </div>
+            <div className="text-left">
+              <h3 className="text-lg md:text-xl font-bold text-white mb-1">Instant Delivery</h3>
+              <p className="text-gray-500 text-sm leading-relaxed">Get your details delivered instantly after verification.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -3,19 +3,25 @@
 import { ShieldCheck, Mail, Instagram, MessageCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
-import { getSettings } from '@/lib/actions'
 
 export default function Footer() {
   const [whatsapp, setWhatsapp] = useState('919752691095')
 
   useEffect(() => {
+    const controller = new AbortController()
     async function loadSettings() {
-      const settings = await getSettings()
-      if (settings && settings.whatsapp) {
-        setWhatsapp(settings.whatsapp)
+      try {
+        const res = await fetch('/api/settings', { cache: 'no-store', signal: controller.signal })
+        const data = await res.json()
+        if (data && data.whatsapp) setWhatsapp(data.whatsapp)
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error('Failed to load settings:', error)
+        }
       }
     }
     loadSettings()
+    return () => controller.abort()
   }, [])
 
   return (
@@ -50,7 +56,7 @@ export default function Footer() {
             <ul className="space-y-4 text-gray-400">
               <li><Link href="/" className="hover:text-white transition-colors">Home</Link></li>
               <li><Link href="/admin" className="hover:text-white transition-colors">Admin Panel</Link></li>
-              <li><Link href={`https://wa.me/${whatsapp}`} target="_blank" className="hover:text-white transition-colors">Support</Link></li>
+              <li><Link href="/support" className="hover:text-white transition-colors">Support</Link></li>
             </ul>
           </div>
 

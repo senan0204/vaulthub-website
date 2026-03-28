@@ -2,31 +2,47 @@
 
 import { X, CreditCard, DollarSign } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { getSettings } from '@/lib/actions'
 
 export default function PaymentModal({ isOpen, onClose, product }) {
   const [whatsapp, setWhatsapp] = useState('919752691095')
 
   useEffect(() => {
+    const controller = new AbortController()
     async function loadSettings() {
-      const settings = await getSettings()
-      if (settings && settings.whatsapp) {
-        setWhatsapp(settings.whatsapp)
+      try {
+        const res = await fetch('/api/settings', { cache: 'no-store', signal: controller.signal })
+        const data = await res.json()
+        if (data && data.whatsapp) setWhatsapp(data.whatsapp)
+      } catch (error) {
+        if (error?.name !== 'AbortError') {
+          console.error('Failed to load settings:', error)
+        }
       }
     }
     loadSettings()
+    return () => controller.abort()
   }, [])
 
   if (!isOpen) return null
 
+  const formatPrice = (priceStr) => {
+    if (!priceStr) return "₹0"
+    const numericPrice = priceStr.replace(/[^0-9]/g, '')
+    if (!numericPrice) return priceStr
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(numericPrice)
+  }
+
   const handlePayment = (method) => {
-    const priceValue = parseFloat(product.price)
+    const priceValue = parseFloat(product.price.replace(/[^0-9.]/g, ''))
     const isNumericPrice = !isNaN(priceValue)
     let message = ''
-    let priceFormatted = product.price
+    let priceFormatted = formatPrice(product.price)
 
     if (method === 'UPI') {
-      priceFormatted = isNumericPrice ? 'INR ' + priceValue : product.price
       message = 'Hello, I want to buy:\n\nProduct: ' + product.title + '\nPrice: ' + priceFormatted + '\nPayment Method: UPI\n\nFrom VaultHub'
     } else if (method === 'PayPal') {
       if (isNumericPrice) {
@@ -68,7 +84,7 @@ export default function PaymentModal({ isOpen, onClose, product }) {
             </div>
             <div className="text-left">
               <div className="text-lg">UPI</div>
-              <div className="text-xs text-gray-500">Pay in INR ({product.price})</div>
+              <div className="text-xs text-gray-500">Pay in INR ({formatPrice(product.price)})</div>
             </div>
           </button>
 
@@ -82,7 +98,7 @@ export default function PaymentModal({ isOpen, onClose, product }) {
             <div className="text-left">
               <div className="text-lg">PayPal</div>
               <div className="text-xs text-gray-500">
-                {isNaN(parseFloat(product.price)) ? `Pay via PayPal (${product.price})` : `Pay in USD (${(parseFloat(product.price) / 94).toFixed(2)})`}
+                {isNaN(parseFloat(product.price.replace(/[^0-9.]/g, ''))) ? `Pay via PayPal (${product.price})` : `Pay in USD (${(parseFloat(product.price.replace(/[^0-9.]/g, '')) / 94).toFixed(2)})`}
               </div>
             </div>
           </button>

@@ -1,13 +1,24 @@
 import { getProductById } from "@/lib/actions";
-import Image from "next/image";
 import Link from "next/link";
-import { ShieldCheck, Zap, ArrowLeft, Star, Heart } from "lucide-react";
+import { ShieldCheck, Zap, ArrowLeft, Star } from "lucide-react";
 import { notFound } from "next/navigation";
 import ProductGallery from "@/components/ProductGallery";
 import BuySection from "@/components/BuySection";
 
 export default async function ProductPage({ params }) {
   const product = await getProductById(params.id);
+  const isPremium = !!product?.isPremium
+
+  const formatPrice = (priceStr) => {
+    if (!priceStr) return "₹0"
+    const numericPrice = String(priceStr).replace(/[^0-9]/g, '')
+    if (!numericPrice) return String(priceStr)
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0
+    }).format(numericPrice)
+  }
 
   if (!product) {
     notFound();
@@ -15,7 +26,7 @@ export default async function ProductPage({ params }) {
 
   return (
     <div className="container mx-auto px-4 pt-32 pb-24">
-      <Link href="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-12 group">
+      <Link href="/marketplace" className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-12 group">
         <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> Back to Marketplace
       </Link>
 
@@ -24,12 +35,19 @@ export default async function ProductPage({ params }) {
         <div className="relative">
           <ProductGallery images={product.images} video={product.video} />
           <div className="absolute top-6 left-6 z-10 flex flex-col gap-2">
-            <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-sm font-bold text-white uppercase tracking-widest">
-              {product.game}
+            <div className={`backdrop-blur-md px-4 py-2 rounded-full border text-sm font-bold text-white uppercase tracking-widest ${
+              isPremium ? 'bg-yellow-500/80 border-yellow-500/50' : 'bg-black/60 border-white/10'
+            }`}>
+              {product.category || 'Game Accounts'}
             </div>
             {product.isHotDeal && product.status !== 'sold' && (
               <div className="bg-red-600/90 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-[10px] font-black text-white uppercase tracking-tighter w-fit animate-pulse">
                 HOT DEAL
+              </div>
+            )}
+            {isPremium && (
+              <div className="bg-yellow-500 backdrop-blur-md px-4 py-2 rounded-full border border-yellow-400 text-[10px] font-black text-black uppercase tracking-tighter w-fit shadow-lg shadow-yellow-500/20">
+                PREMIUM
               </div>
             )}
             {product.status === 'sold' && (
@@ -52,7 +70,7 @@ export default async function ProductPage({ params }) {
               {product.title}
             </h1>
             <div className="flex items-center gap-6 mb-8">
-              <span className="text-4xl font-black text-primary">{product.price}</span>
+              <span className={`text-4xl font-black ${isPremium ? 'text-yellow-500' : 'text-primary'}`}>{formatPrice(product.price)}</span>
               <div className="h-8 w-[1px] bg-white/10" />
               <div className="flex items-center gap-1 text-secondary">
                 <Star className="w-5 h-5 fill-current" />
@@ -70,8 +88,8 @@ export default async function ProductPage({ params }) {
 
             <div className="grid grid-cols-2 gap-4 mb-10">
               <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-                <span className="block text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">Game</span>
-                <span className="text-white font-bold">{product.game}</span>
+                <span className="block text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">Type</span>
+                <span className="text-white font-bold capitalize">{product.type || 'account'}</span>
               </div>
               <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                 <span className="block text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">Status</span>

@@ -1,24 +1,44 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import ProductCard from "@/components/ProductCard"
+import { useSearchParams } from 'next/navigation'
 
-export default function ProductList({ initialProducts }) {
+function ProductListContent({ initialProducts }) {
+  const searchParams = useSearchParams()
   const [filter, setFilter] = useState({
+    type: 'All',
     category: 'All',
-    game: 'All',
-    status: 'available'
+    status: 'available',
+    query: ''
   })
+
+  useEffect(() => {
+    const q = searchParams.get('q') || ''
+    const type = searchParams.get('type') || 'All'
+    const category = searchParams.get('category') || 'All'
+    setFilter(prev => ({ 
+      ...prev, 
+      query: q.toLowerCase(),
+      type: type,
+      category: category
+    }))
+  }, [searchParams])
 
   const filteredProducts = initialProducts.filter(product => {
+    const typeMatch = filter.type === 'All' || product.type === filter.type
     const categoryMatch = filter.category === 'All' || product.category === filter.category
-    const gameMatch = filter.game === 'All' || product.game === filter.game
     const statusMatch = filter.status === 'All' || product.status === filter.status
-    return categoryMatch && gameMatch && statusMatch
+    const queryMatch = !filter.query || 
+      product.title.toLowerCase().includes(filter.query) || 
+      product.description.toLowerCase().includes(filter.query) ||
+      (product.category && product.category.toLowerCase().includes(filter.query))
+
+    return typeMatch && categoryMatch && statusMatch && queryMatch
   })
 
-  const categories = ['All', 'Game Accounts', 'Game Cheats']
-  const games = ['All', 'Genshin Impact', 'Wuthering Waves']
+  const types = ['All', 'account', 'cheat']
+  const categories = ['All', 'Genshin Impact', 'Wuthering Waves', 'Honkai Star Rail', 'Free Fire PC', 'Free Fire Mobile']
   const statuses = [
     { label: 'Available', value: 'available' },
     { label: 'Sold', value: 'sold' },
@@ -39,17 +59,17 @@ export default function ProductList({ initialProducts }) {
           </div>
           
           <div className="hidden md:flex gap-4">
-            {games.filter(g => g !== 'All').map(game => (
+            {categories.filter(g => g !== 'All').map(category => (
               <button
-                key={game}
-                onClick={() => setFilter(prev => ({ ...prev, game: prev.game === game ? 'All' : game }))}
+                key={category}
+                onClick={() => setFilter(prev => ({ ...prev, category: prev.category === category ? 'All' : category }))}
                 className={`px-6 py-3 rounded-2xl font-bold transition-all border ${
-                  filter.game === game 
+                  filter.category === category 
                     ? 'bg-primary text-white border-primary' 
                     : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/20'
                 }`}
               >
-                {game}
+                {category}
               </button>
             ))}
           </div>
@@ -58,19 +78,19 @@ export default function ProductList({ initialProducts }) {
         {/* Filters logic-only UI */}
         <div className="flex flex-wrap gap-4 items-center bg-white/5 p-6 rounded-[2rem] border border-white/10">
           <div className="flex flex-col gap-2">
-            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Category</span>
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Type</span>
             <div className="flex gap-2">
-              {categories.map(cat => (
+              {types.map(type => (
                 <button
-                  key={cat}
-                  onClick={() => setFilter(prev => ({ ...prev, category: cat }))}
+                  key={type}
+                  onClick={() => setFilter(prev => ({ ...prev, type: type }))}
                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${
-                    filter.category === cat 
+                    filter.type === type 
                       ? 'bg-white text-black border-white' 
                       : 'bg-black/50 text-gray-400 border-white/10 hover:border-white/20'
                   }`}
                 >
-                  {cat}
+                  {type.charAt(0).toUpperCase() + type.slice(1)}
                 </button>
               ))}
             </div>
@@ -111,5 +131,13 @@ export default function ProductList({ initialProducts }) {
         </div>
       )}
     </section>
+  )
+}
+
+export default function ProductList({ initialProducts }) {
+  return (
+    <Suspense fallback={<div className="text-center py-12 text-gray-400">Loading marketplace...</div>}>
+      <ProductListContent initialProducts={initialProducts} />
+    </Suspense>
   )
 }
