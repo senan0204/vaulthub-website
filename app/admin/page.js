@@ -75,9 +75,14 @@ export default function AdminPage() {
 
   const handleUpdateSlides = async (e) => {
     e.preventDefault()
-    await updateSlides(slides)
-    setIsSliderModalOpen(false)
-    alert('Slider updated successfully!')
+    try {
+      await updateSlides(slides)
+      setIsSliderModalOpen(false)
+      alert('Slider updated successfully!')
+    } catch (error) {
+      console.error('Failed to update slides:', error)
+      alert('Error updating slides: ' + error.message)
+    }
   }
 
   const handleLogoUpload = async (e) => {
@@ -93,10 +98,15 @@ export default function AdminPage() {
 
   const handleUpdateSettings = async (e) => {
     e.preventDefault()
-    await updateSettings(settings)
-    setIsSettingsOpen(false)
-    alert('Settings updated successfully!')
-    window.location.reload() // Reload to update navbar
+    try {
+      await updateSettings(settings)
+      setIsSettingsOpen(false)
+      alert('Settings updated successfully!')
+      window.location.reload() // Reload to update navbar
+    } catch (error) {
+      console.error('Failed to update settings:', error)
+      alert('Error updating settings: ' + error.message)
+    }
   }
 
   const handleLogin = (e) => {
@@ -109,27 +119,48 @@ export default function AdminPage() {
   }
 
   const handleAddOrUpdate = async (e) => {
-    e.preventDefault()
-    if (editingProduct) {
-      await updateProduct(editingProduct.id, formData)
-    } else {
-      await addProduct(formData)
+    if (e) e.preventDefault()
+    console.log("clicked")
+    try {
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, formData)
+        alert('Product updated successfully!')
+      } else {
+        await addProduct(formData)
+        alert('Product published successfully!')
+      }
+      setIsModalOpen(false)
+      setEditingProduct(null)
+      setFormData({ 
+        type: 'account', 
+        category: 'Genshin Impact', 
+        status: 'available', 
+        isHotDeal: false, 
+        isPremium: false,
+        title: '', 
+        price: '', 
+        description: '', 
+        images: [], 
+        video: '' 
+      })
+      loadProducts()
+    } catch (error) {
+      console.error('Failed to save product:', error)
+      alert('Error: ' + error.message)
     }
-    setIsModalOpen(false)
-    setEditingProduct(null)
-    setFormData({ 
-      type: 'account', 
-      category: 'Genshin Impact', 
-      status: 'available', 
-      isHotDeal: false, 
-      isPremium: false,
-      title: '', 
-      price: '', 
-      description: '', 
-      images: [], 
-      video: '' 
-    })
-    loadProducts()
+  }
+
+  const handleDelete = async (id) => {
+    if (confirm('Are you sure you want to delete this product?')) {
+      try {
+        await deleteProduct(id)
+        loadProducts()
+        alert('Product deleted successfully!')
+      } catch (error) {
+        console.error('Failed to delete product:', error)
+        alert('Error: ' + error.message)
+      }
+    }
   }
 
   const fileToBase64 = (file, quality = 0.7) => {
@@ -214,13 +245,6 @@ export default function AdminPage() {
       ...prev,
       video: ''
     }))
-  }
-
-  const handleDelete = async (id) => {
-    if (confirm('Are you sure you want to delete this product?')) {
-      await deleteProduct(id)
-      loadProducts()
-    }
   }
 
   const openEditModal = (product) => {
@@ -548,7 +572,11 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <button type="submit" className="w-full bg-primary hover:bg-primary/80 text-white font-black py-5 rounded-2xl text-xl transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2">
+              <button 
+                type="button" 
+                onClick={handleAddOrUpdate}
+                className="w-full bg-primary hover:bg-primary/80 active:scale-[0.98] cursor-pointer text-white font-black py-5 rounded-2xl text-xl transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2 relative z-10 pointer-events-auto"
+              >
                 <Save className="w-6 h-6" /> {editingProduct ? 'Update Listing' : 'Publish Listing'}
               </button>
             </form>
