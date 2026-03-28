@@ -76,9 +76,13 @@ export default function AdminPage() {
   const handleUpdateSlides = async (e) => {
     e.preventDefault()
     try {
-      await updateSlides(slides)
-      setIsSliderModalOpen(false)
-      alert('Slider updated successfully!')
+      const result = await updateSlides(slides)
+      if (result?.success) {
+        setIsSliderModalOpen(false)
+        alert('Slider updated successfully!')
+      } else {
+        alert('Error: ' + (result?.error || 'Failed to update slides'))
+      }
     } catch (error) {
       console.error('Failed to update slides:', error)
       alert('Error updating slides: ' + error.message)
@@ -99,10 +103,14 @@ export default function AdminPage() {
   const handleUpdateSettings = async (e) => {
     e.preventDefault()
     try {
-      await updateSettings(settings)
-      setIsSettingsOpen(false)
-      alert('Settings updated successfully!')
-      window.location.reload() // Reload to update navbar
+      const result = await updateSettings(settings)
+      if (result?.success) {
+        setIsSettingsOpen(false)
+        alert('Settings updated successfully!')
+        window.location.reload() // Reload to update navbar
+      } else {
+        alert('Error: ' + (result?.error || 'Failed to update settings'))
+      }
     } catch (error) {
       console.error('Failed to update settings:', error)
       alert('Error updating settings: ' + error.message)
@@ -122,28 +130,33 @@ export default function AdminPage() {
     if (e) e.preventDefault()
     console.log("clicked")
     try {
+      let result;
       if (editingProduct) {
-        await updateProduct(editingProduct.id, formData)
-        alert('Product updated successfully!')
+        result = await updateProduct(editingProduct.id, formData)
       } else {
-        await addProduct(formData)
-        alert('Product published successfully!')
+        result = await addProduct(formData)
       }
-      setIsModalOpen(false)
-      setEditingProduct(null)
-      setFormData({ 
-        type: 'account', 
-        category: 'Genshin Impact', 
-        status: 'available', 
-        isHotDeal: false, 
-        isPremium: false,
-        title: '', 
-        price: '', 
-        description: '', 
-        images: [], 
-        video: '' 
-      })
-      loadProducts()
+
+      if (result?.success) {
+        alert(editingProduct ? 'Product updated successfully!' : 'Product published successfully!')
+        setIsModalOpen(false)
+        setEditingProduct(null)
+        setFormData({ 
+          type: 'account', 
+          category: 'Genshin Impact', 
+          status: 'available', 
+          isHotDeal: false, 
+          isPremium: false,
+          title: '', 
+          price: '', 
+          description: '', 
+          images: [], 
+          video: '' 
+        })
+        loadProducts()
+      } else {
+        alert('Error: ' + (result?.error || 'Unknown error occurred'))
+      }
     } catch (error) {
       console.error('Failed to save product:', error)
       alert('Error: ' + error.message)
@@ -153,9 +166,13 @@ export default function AdminPage() {
   const handleDelete = async (id) => {
     if (confirm('Are you sure you want to delete this product?')) {
       try {
-        await deleteProduct(id)
-        loadProducts()
-        alert('Product deleted successfully!')
+        const result = await deleteProduct(id)
+        if (result?.success) {
+          loadProducts()
+          alert('Product deleted successfully!')
+        } else {
+          alert('Error: ' + (result?.error || 'Failed to delete product'))
+        }
       } catch (error) {
         console.error('Failed to delete product:', error)
         alert('Error: ' + error.message)
