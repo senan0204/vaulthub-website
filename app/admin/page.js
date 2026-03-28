@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getProducts, addProduct, deleteProduct, updateProduct, getSettings, updateSettings, getSlides, updateSlides } from '@/lib/actions'
-import { Plus, Trash2, Edit2, ShieldCheck, X, Save, Settings, Layout, Camera, Video, Upload } from 'lucide-react'
+import { getProducts, addProduct, deleteProduct, updateProduct, getSettings, updateSettings, addSlide, updateSlide, deleteSlide } from '@/lib/actions'
+import { Plus, Trash2, Edit2, ShieldCheck, X, Save, Layout, Camera, Video, Upload, Settings as SettingsIcon } from 'lucide-react'
 import Image from 'next/image'
+import { db } from '@/lib/firebase'
+import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore'
 
 export default function AdminPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -32,7 +34,18 @@ export default function AdminPage() {
     if (isLoggedIn) {
       loadProducts()
       loadSettings()
-      loadSlides()
+      
+      // Real-time listener for slides
+      const slidesQuery = query(collection(db, 'slides'), orderBy('createdAt', 'asc'))
+      const unsubscribeSlides = onSnapshot(slidesQuery, (snapshot) => {
+        const slidesData = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          firebaseId: doc.id
+        }))
+        setSlides(slidesData)
+      })
+
+      return () => unsubscribeSlides()
     }
   }, [isLoggedIn])
 
@@ -44,11 +57,6 @@ export default function AdminPage() {
   const loadSettings = async () => {
     const data = await getSettings()
     setSettings(data)
-  }
-
-  const loadSlides = async () => {
-    const data = await getSlides()
-    setSlides(data)
   }
 
   // Format price helper
@@ -63,29 +71,33 @@ export default function AdminPage() {
     }).format(numericPrice)
   }
 
-  const handleSlideImageUpload = async (e, idx) => {
+  const handleSlideImageUpload = async (e, firebaseId) => {
     const file = e.target.files[0]
     if (!file) return
 
     const imageBase64 = await fileToBase64(file)
-    const newSlides = [...slides]
-    newSlides[idx].image = imageBase64
-    setSlides(newSlides)
+    await updateSlide(firebaseId, { image: imageBase64 })
   }
 
-  const handleUpdateSlides = async (e) => {
-    e.preventDefault()
-    try {
-      const result = await updateSlides(slides)
-      if (result?.success) {
-        setIsSliderModalOpen(false)
-        alert('Slider updated successfully!')
-      } else {
-        alert('Error: ' + (result?.error || 'Failed to update slides'))
-      }
-    } catch (error) {
-      console.error('Failed to update slides:', error)
-      alert('Error updating slides: ' + error.message)
+  const handleUpdateSlideField = async (firebaseId, field, value) => {
+    await updateSlide(firebaseId, { [field]: value })
+  }
+
+  const handleAddSlide = async () => {
+    const newSlide = {
+      id: Date.now().toString(),
+      image: '',
+      title: '',
+      subtitle: '',
+      buttonText: 'View Deals',
+      linkedProductId: ''
+    }
+    await addSlide(newSlide)
+  }
+
+  const handleDeleteSlide = async (firebaseId) => {
+    if (confirm('Are you sure you want to delete this slide?')) {
+      await deleteSlide(firebaseId)
     }
   }
 
@@ -324,7 +336,7 @@ export default function AdminPage() {
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white font-bold px-6 py-3 rounded-xl transition-all border border-white/10"
           >
-            <Settings className="w-5 h-5" /> Site Settings
+            <SettingsIcon className="w-5 h-5" /> Site Settings
           </button>
           <button 
             onClick={() => {
@@ -614,13 +626,13 @@ export default function AdminPage() {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateSlides} className="space-y-8">
+            <div className="space-y-8">
               <div className="grid grid-cols-1 gap-8">
-                {slides.map((slide, idx) => (
-                  <div key={idx} className="bg-black/30 p-6 rounded-3xl border border-white/10 space-y-6 relative group">
+                {slides.map((slide) => (
+                  <div key={slide.firebaseId} className="bg-black/30 p-6 rounded-3xl border border-white/10 space-y-6 relative group">
                     <button 
                       type="button"
-                      onClick={() => setSlides(slides.filter((_, i) => i !== idx))}
+                      onClick={() => handleDeleteSlide(slide.firebaseId)}
                       className="absolute top-4 right-4 text-red-500 hover:bg-red-500/10 p-2 rounded-xl transition-all"
                     >
                       <Trash2 className="w-5 h-5" />
@@ -633,11 +645,7 @@ export default function AdminPage() {
                           <input 
                             type="text"
                             value={slide.title}
-                            onChange={(e) => {
-                              const newSlides = [...slides]
-                              newSlides[idx].title = e.target.value
-                              setSlides(newSlides)
-                            }}
+                            onChange={(e) => handleUpdateSlideField(slide.firebaseId, 'title', e.target.value)}
                             className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
                             placeholder="PREMIUM GENSHIN ACCOUNTS"
                           />
@@ -647,11 +655,7 @@ export default function AdminPage() {
                           <textarea 
                             rows={2}
                             value={slide.subtitle}
-                            onChange={(e) => {
-                              const newSlides = [...slides]
-                              newSlides[idx].subtitle = e.target.value
-                              setSlides(newSlides)
-                            }}
+                            onChange={(e) => handleUpdateSlideField(slide.firebaseId, 'subtitle', e.target.value)}
                             className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none resize-none"
                             placeholder="Get the best C6 characters today."
                           />
@@ -671,7 +675,7 @@ export default function AdminPage() {
                             </div>
                             <label className="cursor-pointer bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all border border-white/10 flex items-center gap-2">
                               <Camera className="w-4 h-4" /> Change Image
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSlideImageUpload(e, idx)} />
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSlideImageUpload(e, slide.firebaseId)} />
                             </label>
                           </div>
                         </div>
@@ -681,11 +685,7 @@ export default function AdminPage() {
                             <input 
                               type="text"
                               value={slide.buttonText}
-                              onChange={(e) => {
-                                const newSlides = [...slides]
-                                newSlides[idx].buttonText = e.target.value
-                                setSlides(newSlides)
-                              }}
+                              onChange={(e) => handleUpdateSlideField(slide.firebaseId, 'buttonText', e.target.value)}
                               className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
                               placeholder="View Deals"
                             />
@@ -694,11 +694,7 @@ export default function AdminPage() {
                             <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Linked Product ID</label>
                             <select 
                               value={slide.linkedProductId}
-                              onChange={(e) => {
-                                const newSlides = [...slides]
-                                newSlides[idx].linkedProductId = e.target.value
-                                setSlides(newSlides)
-                              }}
+                              onChange={(e) => handleUpdateSlideField(slide.firebaseId, 'linkedProductId', e.target.value)}
                               className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
                             >
                               <option value="">None</option>
@@ -716,16 +712,19 @@ export default function AdminPage() {
 
               <button 
                 type="button"
-                onClick={() => setSlides([...slides, { id: Date.now().toString(), image: '', title: '', subtitle: '', buttonText: 'View Deals', linkedProductId: '' }])}
+                onClick={handleAddSlide}
                 className="w-full border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-primary/5 text-gray-400 hover:text-primary py-4 rounded-2xl transition-all font-bold flex items-center justify-center gap-2"
               >
                 <Plus className="w-5 h-5" /> Add New Slide
               </button>
 
-              <button type="submit" className="w-full bg-primary hover:bg-primary/80 text-white font-black py-4 rounded-2xl text-lg transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2">
-                <Save className="w-5 h-5" /> Save Slider Content
+              <button 
+                onClick={() => setIsSliderModalOpen(false)}
+                className="w-full bg-primary hover:bg-primary/80 text-white font-black py-4 rounded-2xl text-lg transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2"
+              >
+                Done
               </button>
-            </form>
+            </div>
           </div>
         </div>
       )}

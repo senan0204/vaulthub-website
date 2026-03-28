@@ -5,6 +5,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Flame, ArrowRight, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { db } from '@/lib/firebase'
+import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore'
 
 export default function HotDealSlider() {
   const [slides, setSlides] = useState([])
@@ -13,58 +15,57 @@ export default function HotDealSlider() {
   const [isPaused, setIsPaused] = useState(false)
 
   useEffect(() => {
-    async function loadData() {
-      const [slidesRes, productsRes] = await Promise.all([
-        fetch('/api/slides', { cache: 'no-store' }),
-        fetch('/api/products', { cache: 'no-store' })
-      ])
-      const [slidesData, productsData] = await Promise.all([
-        slidesRes.json(),
-        productsRes.json()
-      ])
-      
-      const productById = new Map(productsData.map((p) => [p.id, p]))
+    // Real-time listener for products (to find Hot Deals)
+    const productsQuery = query(collection(db, 'products'), orderBy('id', 'desc'))
+    const unsubscribeProducts = onSnapshot(productsQuery, (productsSnapshot) => {
+      const productsData = productsSnapshot.docs.map(doc => ({
+        ...doc.data(),
+        firebaseId: doc.id
+      }))
 
-      // Filter products marked as Hot Deal
-      const hotDealProducts = productsData
-        .filter(p => p.isHotDeal && p.status !== 'sold' && p.images && p.images[0])
-        .map(p => ({
-          id: p.id,
-          image: p.images[0],
-          title: p.title,
-          subtitle: p.description,
-          buttonText: 'BUY NOW',
-          linkedProductId: p.id,
-          isPremium: !!p.isPremium
+      // Real-time listener for custom slides
+      const slidesQuery = query(collection(db, 'slides'), orderBy('createdAt', 'asc'))
+      const unsubscribeSlides = onSnapshot(slidesQuery, (slidesSnapshot) => {
+        const slidesData = slidesSnapshot.docs.map(doc => ({
+          ...doc.data(),
+          firebaseId: doc.id
         }))
+        
+        const productById = new Map(productsData.map((p) => [p.id, p]))
 
-      // Custom Cheat Slide
-      const customCheatSlide = {
-        id: 'custom-cheat-slide',
-        image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=2070&auto=format&fit=crop', // Gaming setup bg
-        title: 'Custom Cheat (Free Fire)',
-        subtitle: 'Get your own private, high-performance custom cheat. Undetected and optimized.',
-        buttonText: 'GET NOW',
-        href: '/custom-cheat',
-        isCustomCheat: true
-      }
+        // Filter products marked as Hot Deal
+        const hotDealProducts = productsData
+          .filter(p => p.isHotDeal && p.status !== 'sold' && p.images && p.images[0])
+          .map(p => ({
+            id: p.id,
+            image: p.images[0],
+            title: p.title,
+            subtitle: p.description,
+            buttonText: 'BUY NOW',
+            linkedProductId: p.id,
+            isPremium: !!p.isPremium
+          }))
 
-      const curatedSlides = (slidesData || [])
-        .map((s) => {
-          const linked = s.linkedProductId ? productById.get(s.linkedProductId) : null
-          const image = s.image || linked?.images?.[0]
-          if (!image) return null
-          return {
-            ...s,
-            image,
-            isPremium: !!linked?.isPremium
-          }
-        })
-        .filter(Boolean)
+        const curatedSlides = (slidesData || [])
+          .map((s) => {
+            const linked = s.linkedProductId ? productById.get(s.linkedProductId) : null
+            const image = s.image || linked?.images?.[0]
+            if (!image) return null
+            return {
+              ...s,
+              image,
+              isPremium: !!linked?.isPremium
+            }
+          })
+          .filter(Boolean)
 
-      setSlides([...hotDealProducts, customCheatSlide, ...curatedSlides])
-    }
-    loadData()
+        setSlides([...hotDealProducts, ...curatedSlides])
+      })
+
+      return () => unsubscribeSlides()
+    })
+
+    return () => unsubscribeProducts()
   }, [])
 
   const nextSlide = useCallback(() => {
