@@ -132,7 +132,8 @@ export default function AdminPage() {
     try {
       let result;
       if (editingProduct) {
-        result = await updateProduct(editingProduct.id, formData)
+        // Use firebaseId for updates
+        result = await updateProduct(editingProduct.firebaseId, formData)
       } else {
         result = await addProduct(formData)
       }
@@ -163,10 +164,11 @@ export default function AdminPage() {
     }
   }
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (product) => {
     if (confirm('Are you sure you want to delete this product?')) {
       try {
-        const result = await deleteProduct(id)
+        // Use firebaseId for deletion
+        const result = await deleteProduct(product.firebaseId)
         if (result?.success) {
           loadProducts()
           alert('Product deleted successfully!')
@@ -381,7 +383,7 @@ export default function AdminPage() {
                   <Edit2 className="w-4 h-4" /> Edit
                 </button>
                 <button 
-                  onClick={() => handleDelete(product.id)}
+                  onClick={() => handleDelete(product)}
                   className="flex items-center justify-center w-12 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white py-3 rounded-xl font-bold transition-all"
                 >
                   <Trash2 className="w-5 h-5" />
@@ -391,7 +393,7 @@ export default function AdminPage() {
               {product.status !== 'sold' && (
                 <button 
                   onClick={async () => {
-                    await updateProduct(product.id, { ...product, status: 'sold' })
+                    await updateProduct(product.firebaseId, { ...product, status: 'sold' })
                     loadProducts()
                   }}
                   className="w-full bg-white/10 hover:bg-white text-white hover:text-black py-3 rounded-xl font-bold transition-all text-sm"
