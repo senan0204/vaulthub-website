@@ -39,9 +39,10 @@ export default function Navbar() {
   const router = useRouter()
 
   useEffect(() => {
+    const controller = new AbortController()
     async function loadSettings() {
       try {
-        const res = await fetch('/api/settings', { cache: 'no-store' })
+        const res = await fetch('/api/settings', { cache: 'no-store', signal: controller.signal })
         const data = await res.json()
         if (data) {
           setSettings({
@@ -50,10 +51,13 @@ export default function Navbar() {
           })
         }
       } catch (error) {
-        console.error("Failed to load settings:", error)
+        if (error?.name !== 'AbortError') {
+          console.error("Failed to load settings:", error)
+        }
       }
     }
     loadSettings()
+    return () => controller.abort()
   }, [])
 
   const handleSearch = (e) => {
@@ -104,7 +108,7 @@ export default function Navbar() {
         </Suspense>
 
         {/* Desktop Menu */}
-        <div className="hidden lg:flex items-center gap-6 text-xs font-medium text-gray-400 shrink-0">
+        <div className="hidden md:flex items-center gap-6 text-xs font-medium text-gray-400 shrink-0">
           {menuItems.map((item) => (
             <Link 
               key={item.name}

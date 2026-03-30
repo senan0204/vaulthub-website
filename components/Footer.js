@@ -8,16 +8,20 @@ export default function Footer() {
   const [whatsapp, setWhatsapp] = useState('919752691095')
 
   useEffect(() => {
+    const controller = new AbortController()
     async function loadSettings() {
       try {
-        const res = await fetch('/api/settings', { cache: 'no-store' })
+        const res = await fetch('/api/settings', { cache: 'no-store', signal: controller.signal })
         const data = await res.json()
         if (data && data.whatsapp) setWhatsapp(data.whatsapp)
       } catch (error) {
-        console.error('Failed to load settings:', error)
+        if (error?.name !== 'AbortError') {
+          console.error('Failed to load settings:', error)
+        }
       }
     }
     loadSettings()
+    return () => controller.abort()
   }, [])
 
   return (
