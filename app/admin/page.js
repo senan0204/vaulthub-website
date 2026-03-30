@@ -1,11 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getProducts, addProduct, deleteProduct, updateProduct, getSettings, updateSettings, addSlide, updateSlide, deleteSlide } from '@/lib/actions'
-import { Plus, Trash2, Edit2, ShieldCheck, X, Save, Layout, Camera, Video, Upload, Settings as SettingsIcon } from 'lucide-react'
+import { getProducts, addProduct, deleteProduct, updateProduct, getSettings, updateSettings, getSlides, updateSlides } from '@/lib/actions'
+import { Plus, Trash2, Edit2, ShieldCheck, X, Save, Settings, Layout, Camera, Video, Upload } from 'lucide-react'
 import Image from 'next/image'
-import { db } from '@/lib/firebase'
-import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore'
 
 export default function AdminPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -15,6 +13,8 @@ export default function AdminPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSliderModalOpen, setIsSliderModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [settings, setSettings] = useState({ logo: '', whatsapp: '' })
   const [slides, setSlides] = useState([])
   const [formData, setFormData] = useState({
@@ -31,23 +31,11 @@ export default function AdminPage() {
   })
 
   useEffect(() => {
-    if (isLoggedIn) {
-      loadProducts()
-      loadSettings()
-      
-      // Real-time listener for slides
-      const slidesQuery = query(collection(db, 'slides'), orderBy('createdAt', 'asc'))
-      const unsubscribeSlides = onSnapshot(slidesQuery, (snapshot) => {
-        const slidesData = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          firebaseId: doc.id
-        }))
-        setSlides(slidesData)
-      })
-
-      return () => unsubscribeSlides()
+    const isAdmin = localStorage.getItem('isAdmin') === 'true'
+    if (isAdmin) {
+      setIsLoggedIn(true)
     }
-  }, [isLoggedIn])
+  }, [])
 
   const loadProducts = async () => {
     const data = await getProducts()
@@ -57,6 +45,11 @@ export default function AdminPage() {
   const loadSettings = async () => {
     const data = await getSettings()
     setSettings(data)
+  }
+
+  const loadSlides = async () => {
+    const data = await getSlides()
+    setSlides(data)
   }
 
   // Format price helper
@@ -71,33 +64,104 @@ export default function AdminPage() {
     }).format(numericPrice)
   }
 
-  const handleSlideImageUpload = async (e, firebaseId) => {
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files)
+    if (files.length === 0) return
+
+    setIsUploading(true)
+    setUploadProgress(0)
+    
+    try {
+      const uploadedUrls = []
+      const totalFiles = files.length
+
+      for (let i = 0; i < totalFiles; i++) {
+        const file = files[i]
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('upload_preset', 'vaulthub_upload')
+
+        const response = await fetch(`https://api.cloudinary.com/v1_1/dhq05fw6z/image/upload`, {
+          method: 'POST',
+          body: formData
+        })
+
+        if (!response.ok) throw new Error('Upload failed')
+        
+        const data = await response.json()
+        uploadedUrls.push(data.secure_url)
+        setUploadProgress(Math.round(((i + 1) / totalFiles) * 100))
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        images: [...prev.images, ...uploadedUrls]
+      }))
+    } catch (error) {
+      console.error('Upload error:', error)
+      alert('Failed to upload images: ' + error.message)
+    } finally {
+      setIsUploading(false)
+      setUploadProgress(0)
+    }
+  }
+
+  const handleVideoUpload = async (e) => {
     const file = e.target.files[0]
     if (!file) return
 
-    const imageBase64 = await fileToBase64(file)
-    await updateSlide(firebaseId, { image: imageBase64 })
-  }
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('upload_preset', 'vaulthub_upload')
 
-  const handleUpdateSlideField = async (firebaseId, field, value) => {
-    await updateSlide(firebaseId, { [field]: value })
-  }
+      const response = await fetch(`https://api.cloudinary.com/v1_1/dhq05fw6z/video/upload`, {
+        method: 'POST',
+        body: formData
+      })
 
-  const handleAddSlide = async () => {
-    const newSlide = {
-      id: Date.now().toString(),
-      image: '',
-      title: '',
-      subtitle: '',
-      buttonText: 'View Deals',
-      linkedProductId: ''
+      if (!response.ok) throw new Error('Video upload failed')
+      
+      const data = await response.json()
+      setFormData(prev => ({
+        ...prev,
+        video: data.secure_url
+      }))
+    } catch (error) {
+      console.error('Video upload error:', error)
+      alert('Failed to upload video: ' + error.message)
+    } finally {
+      setIsUploading(false)
     }
-    await addSlide(newSlide)
   }
 
-  const handleDeleteSlide = async (firebaseId) => {
-    if (confirm('Are you sure you want to delete this slide?')) {
-      await deleteSlide(firebaseId)
+  const handleSlideImageUpload = async (e, idx) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('upload_preset', 'vaulthub_upload')
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/dhq05fw6z/image/upload`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) throw new Error('Slide image upload failed')
+      
+      const data = await response.json()
+      const newSlides = [...slides]
+      newSlides[idx].image = data.secure_url
+      setSlides(newSlides)
+    } catch (error) {
+      console.error('Slide upload error:', error)
+      alert('Failed to upload slide image')
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -105,11 +169,49 @@ export default function AdminPage() {
     const file = e.target.files[0]
     if (!file) return
 
-    const logoBase64 = await fileToBase64(file)
-    setSettings(prev => ({
-      ...prev,
-      logo: logoBase64
-    }))
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('upload_preset', 'vaulthub_upload')
+
+      const response = await fetch(`https://api.cloudinary.com/v1_1/dhq05fw6z/image/upload`, {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) throw new Error('Logo upload failed')
+      
+      const data = await response.json()
+      setSettings(prev => ({
+        ...prev,
+        logo: data.secure_url
+      }))
+    } catch (error) {
+      console.error('Logo upload error:', error)
+      alert('Failed to upload logo')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleUpdateSlides = async (e) => {
+    if (e) e.preventDefault()
+    try {
+      const result = await updateSlides(slides)
+      if (result?.success) {
+        setIsSliderModalOpen(false)
+        alert('Slider updated successfully!')
+        // No need to manually call loadSlides() if we use real-time listeners, 
+        // but it doesn't hurt for immediate local feedback.
+        await loadSlides()
+      } else {
+        alert('Error: ' + (result?.error || 'Failed to update slides'))
+      }
+    } catch (error) {
+      console.error('Failed to update slides:', error)
+      alert('Error updating slides: ' + error.message)
+    }
   }
 
   const handleUpdateSettings = async (e) => {
@@ -119,6 +221,7 @@ export default function AdminPage() {
       if (result?.success) {
         setIsSettingsOpen(false)
         alert('Settings updated successfully!')
+        await loadSettings()
         window.location.reload() // Reload to update navbar
       } else {
         alert('Error: ' + (result?.error || 'Failed to update settings'))
@@ -131,15 +234,31 @@ export default function AdminPage() {
 
   const handleLogin = (e) => {
     e.preventDefault()
-    if (password === 'adminsen4nnn' || password === 'adminnero') { 
+    if (password === 'vaulthubadmin') {
+      localStorage.setItem('isAdmin', 'true')
       setIsLoggedIn(true)
     } else {
-      alert('Incorrect password!')
+      alert('Incorrect password')
     }
+  }
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      loadProducts()
+      loadSettings()
+      loadSlides()
+    }
+  }, [isLoggedIn])
+
+  const handleLogout = () => {
+    localStorage.removeItem('isAdmin')
+    setIsLoggedIn(false)
   }
 
   const handleAddOrUpdate = async (e) => {
     if (e) e.preventDefault()
+    if (isUploading) return // Prevent clicking while uploading
+
     console.log("clicked")
     try {
       let result;
@@ -166,7 +285,7 @@ export default function AdminPage() {
           images: [], 
           video: '' 
         })
-        loadProducts()
+        await loadProducts()
       } else {
         alert('Error: ' + (result?.error || 'Unknown error occurred'))
       }
@@ -182,7 +301,7 @@ export default function AdminPage() {
         // Use firebaseId for deletion
         const result = await deleteProduct(product.firebaseId)
         if (result?.success) {
-          loadProducts()
+          await loadProducts()
           alert('Product deleted successfully!')
         } else {
           alert('Error: ' + (result?.error || 'Failed to delete product'))
@@ -192,76 +311,6 @@ export default function AdminPage() {
         alert('Error: ' + error.message)
       }
     }
-  }
-
-  const fileToBase64 = (file, quality = 0.7) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = (event) => {
-        const imageUrl = event.target.result
-        
-        // If it's not an image or if it's small enough, don't compress
-        if (!file.type.startsWith('image/') || file.size < 200000) {
-          resolve(imageUrl)
-          return
-        }
-
-        const img = new window.Image()
-        img.src = imageUrl
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          let width = img.width
-          let height = img.height
-
-          // Max dimension
-          const MAX_SIZE = 1200
-          if (width > height) {
-            if (width > MAX_SIZE) {
-              height *= MAX_SIZE / width
-              width = MAX_SIZE
-            }
-          } else {
-            if (height > MAX_SIZE) {
-              width *= MAX_SIZE / height
-              height = MAX_SIZE
-            }
-          }
-
-          canvas.width = width
-          canvas.height = height
-          const ctx = canvas.getContext('2d')
-          ctx.drawImage(img, 0, 0, width, height)
-          
-          // Compress to JPEG
-          resolve(canvas.toDataURL('image/jpeg', quality))
-        }
-        img.onerror = (error) => reject(error)
-      }
-      reader.onerror = (error) => reject(error)
-    })
-  }
-
-  const handleImageUpload = async (e) => {
-    const files = Array.from(e.target.files)
-    if (files.length === 0) return
-
-    const newImages = await Promise.all(files.map(file => fileToBase64(file)))
-    setFormData(prev => ({
-      ...prev,
-      images: [...prev.images, ...newImages]
-    }))
-  }
-
-  const handleVideoUpload = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-
-    const videoBase64 = await fileToBase64(file)
-    setFormData(prev => ({
-      ...prev,
-      video: videoBase64
-    }))
   }
 
   const removeImage = (index) => {
@@ -336,7 +385,13 @@ export default function AdminPage() {
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white font-bold px-6 py-3 rounded-xl transition-all border border-white/10"
           >
-            <SettingsIcon className="w-5 h-5" /> Site Settings
+            <Settings className="w-5 h-5" /> Site Settings
+          </button>
+          <button 
+            onClick={handleLogout}
+            className="px-6 py-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl font-bold transition-all border border-red-500/20"
+          >
+            Logout
           </button>
           <button 
             onClick={() => {
@@ -406,7 +461,7 @@ export default function AdminPage() {
                 <button 
                   onClick={async () => {
                     await updateProduct(product.firebaseId, { ...product, status: 'sold' })
-                    loadProducts()
+                    await loadProducts()
                   }}
                   className="w-full bg-white/10 hover:bg-white text-white hover:text-black py-3 rounded-xl font-bold transition-all text-sm"
                 >
@@ -606,9 +661,19 @@ export default function AdminPage() {
               <button 
                 type="button" 
                 onClick={handleAddOrUpdate}
-                className="w-full bg-primary hover:bg-primary/80 active:scale-[0.98] cursor-pointer text-white font-black py-5 rounded-2xl text-xl transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2 relative z-10 pointer-events-auto"
+                disabled={isUploading}
+                className={`w-full bg-primary hover:bg-primary/80 active:scale-[0.98] cursor-pointer text-white font-black py-5 rounded-2xl text-xl transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2 relative z-10 pointer-events-auto ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <Save className="w-6 h-6" /> {editingProduct ? 'Update Listing' : 'Publish Listing'}
+                {isUploading ? (
+                  <>
+                    <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+                    Uploading ({uploadProgress}%)
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-6 h-6" /> {editingProduct ? 'Update Listing' : 'Publish Listing'}
+                  </>
+                )}
               </button>
             </form>
           </div>
@@ -626,13 +691,13 @@ export default function AdminPage() {
               </button>
             </div>
 
-            <div className="space-y-8">
+            <form onSubmit={handleUpdateSlides} className="space-y-8">
               <div className="grid grid-cols-1 gap-8">
-                {slides.map((slide) => (
-                  <div key={slide.firebaseId} className="bg-black/30 p-6 rounded-3xl border border-white/10 space-y-6 relative group">
+                {slides.map((slide, idx) => (
+                  <div key={idx} className="bg-black/30 p-6 rounded-3xl border border-white/10 space-y-6 relative group">
                     <button 
                       type="button"
-                      onClick={() => handleDeleteSlide(slide.firebaseId)}
+                      onClick={() => setSlides(slides.filter((_, i) => i !== idx))}
                       className="absolute top-4 right-4 text-red-500 hover:bg-red-500/10 p-2 rounded-xl transition-all"
                     >
                       <Trash2 className="w-5 h-5" />
@@ -645,7 +710,11 @@ export default function AdminPage() {
                           <input 
                             type="text"
                             value={slide.title}
-                            onChange={(e) => handleUpdateSlideField(slide.firebaseId, 'title', e.target.value)}
+                            onChange={(e) => {
+                              const newSlides = [...slides]
+                              newSlides[idx].title = e.target.value
+                              setSlides(newSlides)
+                            }}
                             className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
                             placeholder="PREMIUM GENSHIN ACCOUNTS"
                           />
@@ -655,7 +724,11 @@ export default function AdminPage() {
                           <textarea 
                             rows={2}
                             value={slide.subtitle}
-                            onChange={(e) => handleUpdateSlideField(slide.firebaseId, 'subtitle', e.target.value)}
+                            onChange={(e) => {
+                              const newSlides = [...slides]
+                              newSlides[idx].subtitle = e.target.value
+                              setSlides(newSlides)
+                            }}
                             className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none resize-none"
                             placeholder="Get the best C6 characters today."
                           />
@@ -675,7 +748,7 @@ export default function AdminPage() {
                             </div>
                             <label className="cursor-pointer bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all border border-white/10 flex items-center gap-2">
                               <Camera className="w-4 h-4" /> Change Image
-                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSlideImageUpload(e, slide.firebaseId)} />
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleSlideImageUpload(e, idx)} />
                             </label>
                           </div>
                         </div>
@@ -685,7 +758,11 @@ export default function AdminPage() {
                             <input 
                               type="text"
                               value={slide.buttonText}
-                              onChange={(e) => handleUpdateSlideField(slide.firebaseId, 'buttonText', e.target.value)}
+                              onChange={(e) => {
+                                const newSlides = [...slides]
+                                newSlides[idx].buttonText = e.target.value
+                                setSlides(newSlides)
+                              }}
                               className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
                               placeholder="View Deals"
                             />
@@ -694,7 +771,11 @@ export default function AdminPage() {
                             <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Linked Product ID</label>
                             <select 
                               value={slide.linkedProductId}
-                              onChange={(e) => handleUpdateSlideField(slide.firebaseId, 'linkedProductId', e.target.value)}
+                              onChange={(e) => {
+                                const newSlides = [...slides]
+                                newSlides[idx].linkedProductId = e.target.value
+                                setSlides(newSlides)
+                              }}
                               className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-primary outline-none"
                             >
                               <option value="">None</option>
@@ -712,19 +793,16 @@ export default function AdminPage() {
 
               <button 
                 type="button"
-                onClick={handleAddSlide}
+                onClick={() => setSlides([...slides, { id: Date.now().toString(), image: '', title: '', subtitle: '', buttonText: 'View Deals', linkedProductId: '' }])}
                 className="w-full border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-primary/5 text-gray-400 hover:text-primary py-4 rounded-2xl transition-all font-bold flex items-center justify-center gap-2"
               >
                 <Plus className="w-5 h-5" /> Add New Slide
               </button>
 
-              <button 
-                onClick={() => setIsSliderModalOpen(false)}
-                className="w-full bg-primary hover:bg-primary/80 text-white font-black py-4 rounded-2xl text-lg transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2"
-              >
-                Done
+              <button type="submit" className="w-full bg-primary hover:bg-primary/80 text-white font-black py-4 rounded-2xl text-lg transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-2">
+                <Save className="w-5 h-5" /> Save Slider Content
               </button>
-            </div>
+            </form>
           </div>
         </div>
       )}

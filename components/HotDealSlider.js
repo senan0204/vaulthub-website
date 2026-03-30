@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Flame, ArrowRight, Zap } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { db } from '@/lib/firebase'
-import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore'
+import { collection, onSnapshot, query, orderBy, doc, getDoc } from 'firebase/firestore'
 
 export default function HotDealSlider() {
   const [slides, setSlides] = useState([])
@@ -15,58 +15,83 @@ export default function HotDealSlider() {
   const [isPaused, setIsPaused] = useState(false)
 
   useEffect(() => {
-    // Real-time listener for products (to find Hot Deals)
+    // 1. Real-time listener for products (to get Hot Deals)
     const productsQuery = query(collection(db, 'products'), orderBy('id', 'desc'))
-    const unsubscribeProducts = onSnapshot(productsQuery, (productsSnapshot) => {
-      const productsData = productsSnapshot.docs.map(doc => ({
-        ...doc.data(),
-        firebaseId: doc.id
-      }))
+    
+    // 2. Real-time listener for manual slides
+    const slidesDocRef = doc(db, 'config', 'slides')
 
-      // Real-time listener for custom slides
-      const slidesQuery = query(collection(db, 'slides'), orderBy('createdAt', 'asc'))
-      const unsubscribeSlides = onSnapshot(slidesQuery, (slidesSnapshot) => {
-        const slidesData = slidesSnapshot.docs.map(doc => ({
-          ...doc.data(),
-          firebaseId: doc.id
+    let productsData = []
+    let manualSlidesData = []
+
+    const updateAllSlides = () => {
+      const productById = new Map(productsData.map((p) => [p.id, p]))
+
+      // Filter products marked as Hot Deal
+      const hotDealProducts = productsData
+        .filter(p => p.isHotDeal && p.status !== 'sold' && p.images && p.images[0])
+        .map(p => ({
+          id: `hot-deal-${p.id}`,
+          image: p.images[0],
+          title: p.title,
+          subtitle: p.description,
+          buttonText: 'BUY NOW',
+          linkedProductId: p.id,
+          isPremium: !!p.isPremium
         }))
-        
-        const productById = new Map(productsData.map((p) => [p.id, p]))
 
-        // Filter products marked as Hot Deal
-        const hotDealProducts = productsData
-          .filter(p => p.isHotDeal && p.status !== 'sold' && p.images && p.images[0])
-          .map(p => ({
-            id: p.id,
-            image: p.images[0],
-            title: p.title,
-            subtitle: p.description,
-            buttonText: 'BUY NOW',
-            linkedProductId: p.id,
-            isPremium: !!p.isPremium
-          }))
+      // Custom Cheat Slide
+      const customCheatSlide = {
+        id: 'custom-cheat-slide',
+        image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=2070&auto=format&fit=crop', // Gaming setup bg
+        title: 'Custom Cheat (Free Fire)',
+        subtitle: 'Get your own private, high-performance custom cheat. Undetected and optimized.',
+        buttonText: 'GET NOW',
+        href: '/custom-cheat',
+        isCustomCheat: true
+      }
 
-        const curatedSlides = (slidesData || [])
-          .map((s) => {
-            const linked = s.linkedProductId ? productById.get(s.linkedProductId) : null
-            const image = s.image || linked?.images?.[0]
-            if (!image) return null
-            return {
-              ...s,
-              image,
-              isPremium: !!linked?.isPremium
-            }
-          })
-          .filter(Boolean)
+      const curatedSlides = (manualSlidesData || [])
+        .map((s) => {
+          const linked = s.linkedProductId ? productById.get(s.linkedProductId) : null
+          const image = s.image || linked?.images?.[0]
+          if (!image) return null
+          return {
+            ...s,
+            image,
+            isPremium: !!linked?.isPremium
+          }
+        })
+        .filter(Boolean)
 
-        setSlides([...hotDealProducts, ...curatedSlides])
-      })
+      const finalSlides = [...hotDealProducts, customCheatSlide, ...curatedSlides]
+      setSlides(finalSlides)
+      
+      // Reset index if it's out of bounds
+      if (currentIndex >= finalSlides.length) {
+        setCurrentIndex(0)
+      }
+    }
 
-      return () => unsubscribeSlides()
+    const unsubProducts = onSnapshot(productsQuery, (snapshot) => {
+      productsData = snapshot.docs.map(doc => ({ ...doc.data(), firebaseId: doc.id }))
+      updateAllSlides()
     })
 
-    return () => unsubscribeProducts()
-  }, [])
+    const unsubSlides = onSnapshot(slidesDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        manualSlidesData = docSnap.data().items || []
+      } else {
+        manualSlidesData = []
+      }
+      updateAllSlides()
+    })
+
+    return () => {
+      unsubProducts()
+      unsubSlides()
+    }
+  }, [currentIndex])
 
   const nextSlide = useCallback(() => {
     if (slides.length <= 1) return
@@ -126,7 +151,7 @@ export default function HotDealSlider() {
         )}
         <AnimatePresence initial={false} custom={direction}>
           <motion.div
-            key={currentIndex}
+            key={currentSlide.id}
             custom={direction}
             variants={variants}
             initial="enter"

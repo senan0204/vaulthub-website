@@ -39,10 +39,9 @@ export default function Navbar() {
   const router = useRouter()
 
   useEffect(() => {
-    const controller = new AbortController()
     async function loadSettings() {
       try {
-        const res = await fetch('/api/settings', { cache: 'no-store', signal: controller.signal })
+        const res = await fetch('/api/settings', { cache: 'no-store' })
         const data = await res.json()
         if (data) {
           setSettings({
@@ -51,13 +50,10 @@ export default function Navbar() {
           })
         }
       } catch (error) {
-        if (error?.name !== 'AbortError') {
-          console.error("Failed to load settings:", error)
-        }
+        console.error("Failed to load settings:", error)
       }
     }
     loadSettings()
-    return () => controller.abort()
   }, [])
 
   const handleSearch = (e) => {
